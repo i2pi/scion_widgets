@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
+import 'app_button.dart';
 import 'grid.dart';
 import 'labeled_card.dart';
 import 'neumorphic_slider.dart';
@@ -302,7 +303,6 @@ class _ABToggleState extends State<_ABToggle>
   @override
   Widget build(BuildContext context) {
     final t = GridProvider.of(context);
-    final btnStyle = t.textCaption.copyWith(fontWeight: FontWeight.w700);
     const aColor = Color(0xFF5B8DEF);
     const bColor = Color(0xFFEF7B5B);
     const flashColor = Color(0xFFFFF176); // yellow
@@ -314,28 +314,18 @@ class _ABToggleState extends State<_ABToggle>
 
         Widget btn(String label, ABGroup target, Color color) {
           final active = widget.group == target;
-          // Flash border only on unassigned buttons
+          // Flash only unassigned buttons. AppButton draws its hairline rim
+          // from the accent when unselected, so flashing is a lerp of the
+          // accent toward yellow — the same trick the LUT editor's lock button
+          // uses (lut_editor.dart:928).
           final showFlash = !active && flash > 0.01;
-          final bgColor = active ? color : const Color(0xFF2A2A2C);
-          final borderColor = active
-              ? color
-              : showFlash
-                  ? Color.lerp(Colors.grey[700]!, flashColor, flash)!
-                  : Colors.grey[700]!;
-          final textColor = active ? Colors.white : Colors.grey[500]!;
-
-          return GestureDetector(
-            onTap: () => widget.onChanged(target),
-            child: Container(
-              padding:
-                  EdgeInsets.symmetric(horizontal: t.sm, vertical: t.xs * 0.5),
-              decoration: BoxDecoration(
-                color: bgColor,
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(color: borderColor, width: 1),
-              ),
-              child: Text(label, style: btnStyle.copyWith(color: textColor)),
-            ),
+          return AppButton(
+            label: label,
+            dense: true,
+            selected: active,
+            accentColor:
+                showFlash ? Color.lerp(color, flashColor, flash)! : color,
+            onPressed: () => widget.onChanged(target),
           );
         }
 
@@ -432,23 +422,16 @@ class _CrossfaderState extends State<_Crossfader>
     const bColor = Color(0xFFEF7B5B);
     final labelStyle =
         t.textLabel.copyWith(fontWeight: FontWeight.w700, fontSize: t.u * 1.4);
-    final btnStyle = t.textCaption
-        .copyWith(fontWeight: FontWeight.w700, fontSize: t.u * 0.9);
 
-    Widget autoBtn(String label, Color color, double target) {
-      return GestureDetector(
-        onTap: () => _startAuto(target),
-        child: Container(
-          padding: EdgeInsets.symmetric(horizontal: t.sm, vertical: t.xs * 0.5),
-          decoration: BoxDecoration(
-            color: const Color(0xFF2A2A2C),
-            borderRadius: BorderRadius.circular(4),
-            border: Border.all(color: Colors.grey[700]!, width: 1),
-          ),
-          child: Text('AUTO', style: btnStyle.copyWith(color: color)),
-        ),
-      );
-    }
+    // Momentary, never selected — the accent supplies both the group-coloured
+    // label (AppButton uses it as the foreground when unselected) and the
+    // hairline rim, which is what the hand-rolled version drew by hand.
+    Widget autoBtn(Color color, double target) => AppButton(
+          label: 'AUTO',
+          dense: true,
+          accentColor: color,
+          onPressed: () => _startAuto(target),
+        );
 
     return Row(
       children: [
@@ -457,7 +440,7 @@ class _CrossfaderState extends State<_Crossfader>
           children: [
             Text('A', style: labelStyle.copyWith(color: aColor)),
             SizedBox(height: t.xs),
-            autoBtn('AUTO', aColor, 0.0),
+            autoBtn(aColor, 0.0),
           ],
         ),
         SizedBox(width: t.sm),
@@ -489,7 +472,7 @@ class _CrossfaderState extends State<_Crossfader>
           children: [
             Text('B', style: labelStyle.copyWith(color: bColor)),
             SizedBox(height: t.xs),
-            autoBtn('AUTO', bColor, 1.0),
+            autoBtn(bColor, 1.0),
           ],
         ),
       ],

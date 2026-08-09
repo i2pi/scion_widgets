@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:window_size/window_size.dart';
 
 import 'app_alert.dart';
+import 'button_gallery.dart';
 import 'disconnected_scrim.dart';
 import 'discovery.dart';
 import 'network.dart';
@@ -365,6 +366,9 @@ class _MyHomePageState extends State<MyHomePage> {
         onDownload: (bytes) {/* … */},
         isActive: selectedIndex == 8,
       ),
+      // 9 → Styles. Debug-only button/style catalogue; the destination below
+      // is gated on the same condition so the two lists stay index-aligned.
+      if (kDebugMode) const ButtonGalleryPage(),
     ];
   }
 
@@ -498,6 +502,11 @@ class _MyHomePageState extends State<MyHomePage> {
                                     icon: Icon(Icons.view_list),
                                     label: Text('OSC Log'),
                                   ),
+                                  if (kDebugMode)
+                                    const NavigationRailDestination(
+                                      icon: Icon(Icons.palette_outlined),
+                                      label: Text('Styles'),
+                                    ),
                                 ],
                               ),
                             ),

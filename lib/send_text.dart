@@ -2,6 +2,7 @@
 // Text overlay controls for MFC OSD
 
 import 'package:flutter/material.dart';
+import 'app_button.dart';
 import 'color_channels.dart';
 import 'package:provider/provider.dart';
 import 'osc_widget_binding.dart';
@@ -256,41 +257,17 @@ class _SendTextState extends State<SendText> {
         SizedBox(width: t.sm),
         for (int r = 1; r <= 4; r++) ...[
           // Regions 2-4 hold text OR a sprite: if a sprite occupies this region,
-          // it can't hold text, so disable and grey the tab.
-          Builder(builder: (context) {
-            final blocked = r >= 2 && sel.spriteOccupied(r);
-            final tab = GestureDetector(
-              onTap: blocked ? null : () => _selectRegion(r),
-              child: Container(
-                padding: EdgeInsets.symmetric(horizontal: t.md, vertical: t.xs),
-                decoration: BoxDecoration(
-                  color: _region == r
-                      ? const Color(0xFF4A6A8A)
-                      : const Color(0xFF2A2A2C),
-                  borderRadius: BorderRadius.circular(5),
-                  border: Border.all(
-                    color: _region == r
-                        ? const Color(0xFF6A9ACA)
-                        : Colors.grey[600]!,
-                  ),
-                ),
-                child: Text('$r',
-                    style: t.textLabel.copyWith(
-                      fontWeight: FontWeight.w700,
-                      color: _region == r ? Colors.white : Colors.grey[300],
-                    )),
-              ),
-            );
-            return Opacity(
-              opacity: blocked ? 0.35 : 1.0,
-              child: blocked
-                  ? Tooltip(
-                      message: 'Region $r has a sprite',
-                      child: MouseRegion(
-                          cursor: SystemMouseCursors.forbidden, child: tab))
-                  : tab,
-            );
-          }),
+          // it can't hold text, so block the tab.
+          AppButton(
+            label: '$r',
+            dense: true,
+            selected: _region == r,
+            accentColor: kSelectAccent,
+            blockedReason: r >= 2 && sel.spriteOccupied(r)
+                ? 'Region $r has a sprite'
+                : null,
+            onPressed: () => _selectRegion(r),
+          ),
           SizedBox(width: t.xs),
         ],
       ],
