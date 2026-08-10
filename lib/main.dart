@@ -8,7 +8,6 @@ import 'package:provider/provider.dart';
 import 'package:window_size/window_size.dart';
 
 import 'app_alert.dart';
-import 'button_gallery.dart';
 import 'disconnected_scrim.dart';
 import 'discovery.dart';
 import 'network.dart';
@@ -31,6 +30,42 @@ final GlobalKey<ScaffoldMessengerState> globalScaffoldMessengerKey =
 
 /// Debug/testing toggle: set false to hide disconnected UI scrim + dimming.
 const bool kShowDisconnectedOverlay = true;
+
+/// House style for every hover tooltip in the app.
+///
+/// Set once on [ThemeData] rather than per-call: `Tooltip` is used at ~30 sites
+/// (card preset icons, the LUT export/import icons, AppButton's `tooltip` and
+/// `blockedReason`, …) and every one of them was rendering Material's default
+/// grey slab, which matches nothing else here.
+///
+/// Follows the app alert (app_alert.dart): the same #2E2F34 face, hairline rim
+/// and DINPro text, one step smaller and without the tone accent, since a
+/// tooltip explains rather than announces. [waitDuration] keeps it from
+/// flashing up on every incidental pass of the pointer.
+final TooltipThemeData kScionTooltipTheme = TooltipThemeData(
+  waitDuration: const Duration(milliseconds: 450),
+  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+  margin: const EdgeInsets.symmetric(horizontal: 8),
+  decoration: BoxDecoration(
+    color: const Color(0xFF2E2F34),
+    borderRadius: BorderRadius.circular(6),
+    border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
+    boxShadow: [
+      BoxShadow(
+        color: Colors.black.withValues(alpha: 0.28),
+        blurRadius: 12,
+        offset: const Offset(0, 4),
+      ),
+    ],
+  ),
+  textStyle: const TextStyle(
+    fontFamily: 'DINPro',
+    fontSize: 12,
+    fontWeight: FontWeight.w400,
+    letterSpacing: 0.08,
+    color: Color(0xFFF1F1F3),
+  ),
+);
 
 /// Returns true for network noise we expect during idle auto-reconnects
 /// (e.g., no device reachable on the network). These should not surface a
@@ -173,6 +208,7 @@ class MyApp extends StatelessWidget {
             onPrimary: Colors.black,
             onSurface: Colors.white,
           ),
+          tooltipTheme: kScionTooltipTheme,
           outlinedButtonTheme: OutlinedButtonThemeData(
             style: OutlinedButton.styleFrom(
               side: BorderSide(color: Colors.grey[400]!),
@@ -366,9 +402,6 @@ class _MyHomePageState extends State<MyHomePage> {
         onDownload: (bytes) {/* … */},
         isActive: selectedIndex == 8,
       ),
-      // 9 → Styles. Debug-only button/style catalogue; the destination below
-      // is gated on the same condition so the two lists stay index-aligned.
-      if (kDebugMode) const ButtonGalleryPage(),
     ];
   }
 
@@ -502,11 +535,6 @@ class _MyHomePageState extends State<MyHomePage> {
                                     icon: Icon(Icons.view_list),
                                     label: Text('OSC Log'),
                                   ),
-                                  if (kDebugMode)
-                                    const NavigationRailDestination(
-                                      icon: Icon(Icons.palette_outlined),
-                                      label: Text('Styles'),
-                                    ),
                                 ],
                               ),
                             ),

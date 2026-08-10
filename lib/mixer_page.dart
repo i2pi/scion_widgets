@@ -21,8 +21,11 @@ class MixerPage extends StatelessWidget {
   /// The last column is the capture return, not a send.
   static bool isReturn(int sourceSend) => sourceSend == 4;
 
+  /// Column heading: a column is a source feeding INTO each row's send, so the
+  /// sends are named as inputs. The Return keeps its bare name — it is only
+  /// ever a source, so 'Input' would not distinguish it from anything.
   static String sourceLabel(int sourceSend) =>
-      isReturn(sourceSend) ? 'Return' : 'Send $sourceSend';
+      isReturn(sourceSend) ? 'Return' : 'Send $sourceSend Input';
 
   /// The signal-path colour a source column is tinted with, matching the
   /// System Overview diagram.
@@ -125,36 +128,11 @@ class _MixerMatrixState extends State<_MixerMatrix> {
   @override
   Widget build(BuildContext context) {
     final t = widget.tokens;
-    final headerStyle = t.textLabel.copyWith(
-      color: const Color(0xFFE1E1E3),
-      fontWeight: FontWeight.w700,
-    );
 
+    // No column-header strip: each cell names its own source (see _MixerCell).
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Column headers
-        GridRow(
-          cells: [
-            (
-              span: 12,
-              child: Row(
-                children: [
-                  for (final source in MixerPage.sources)
-                    Expanded(
-                      child: Center(
-                        child: Text(
-                          MixerPage.sourceLabel(source),
-                          style: headerStyle,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        SizedBox(height: t.sm),
         for (int targetSend = 1; targetSend <= 3; targetSend++) ...[
           _MixerRow(
             targetSend: targetSend,
@@ -223,7 +201,13 @@ class _MixerRowState extends State<_MixerRow> {
         (
           span: 12,
           child: Panel.dark(
-            title: 'Send ${widget.targetSend}',
+            // A row is one send's output bus; the columns above are its inputs.
+            title: 'Send ${widget.targetSend} Output',
+            titleStyle: t.textPanelTitle.copyWith(
+              fontSize: t.u * 1.3,
+              fontWeight: FontWeight.w700,
+              color: const Color(0xFFE1E1E3),
+            ),
             child: Column(
               children: [
                 IntrinsicHeight(
@@ -407,6 +391,13 @@ class _CrossfaderState extends State<_Crossfader>
   bool _autoRunning = false;
   Duration _lastStep = Duration.zero;
 
+  /// Which end the bar was last parked at. The fill grows from that side, so
+  /// it reads as "how far off the bus you are" rather than always creeping in
+  /// from the left — which is how a hardware T-bar's LEDs behave, and which
+  /// otherwise makes a fader sitting hard on A look half mixed toward B.
+  /// Starts false: _crossfade opens at 0.0, i.e. parked on A.
+  bool _parkedOnB = false;
+
   /// Duration of the take currently running, captured when it starts so that
   /// turning a knob mid-transition cannot warp the one already under way.
   Duration _activeDuration = _durationOf(_defaultTake);
@@ -418,6 +409,24 @@ class _CrossfaderState extends State<_Crossfader>
   void initState() {
     super.initState();
     _ticker = createTicker(_onTick);
+    _notePark(widget.value);
+  }
+
+  @override
+  void didUpdateWidget(_Crossfader old) {
+    super.didUpdateWidget(old);
+    // Catches both ends of a take and a manual drag run to the stop, since
+    // every value change arrives here from the parent.
+    _notePark(widget.value);
+  }
+
+  /// Remember the end the bar has reached; ignore everything in between.
+  void _notePark(double v) {
+    if (v <= 0.0 && _parkedOnB) {
+      setState(() => _parkedOnB = false);
+    } else if (v >= 1.0 && !_parkedOnB) {
+      setState(() => _parkedOnB = true);
+    }
   }
 
   void _onTick(Duration elapsed) {
@@ -506,20 +515,17 @@ class _CrossfaderState extends State<_Crossfader>
         onChanged: (v) => _setTake(toA, v),
       );
 
+  // No tooltip: the link/link_off glyph carries its own meaning, and a bare
+  // Material Tooltip brings its own styling that matches nothing else here.
   Widget _linkToggle(GridTokens t) => GestureDetector(
         onTap: _toggleLink,
         behavior: HitTestBehavior.opaque,
-        child: Tooltip(
-          message: _linked
-              ? 'Take times linked — tap to set each end independently'
-              : 'Take times independent — tap to link',
-          child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: t.xs),
-            child: Icon(
-              _linked ? Icons.link : Icons.link_off,
-              size: t.knobSm * 0.4,
-              color: _linked ? const Color(0xFFFFF176) : Colors.grey[600],
-            ),
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: t.xs),
+          child: Icon(
+            _linked ? Icons.link : Icons.link_off,
+            size: t.knobSm * 0.4,
+            color: _linked ? const Color(0xFFFFF176) : Colors.grey[600],
           ),
         ),
       );
@@ -604,6 +610,8 @@ class _CrossfaderState extends State<_Crossfader>
               maxValue: 1.0,
               value: widget.value,
               defaultValue: 0.5,
+              fillOrigin:
+                  _parkedOnB ? SliderFillOrigin.end : SliderFillOrigin.start,
               label: '',
               format: '',
               trackWidth: 14,
@@ -658,6 +666,17 @@ class _MixerCell extends StatelessWidget {
           padding: EdgeInsets.all(t.xs),
           child: Column(
             children: [
+              // Names its own source, rather than relying on a header strip
+              // above the matrix — three rows down, that header is a long way
+              // from the cell you are reading.
+              Text(
+                MixerPage.sourceLabel(sourceSend),
+                style: t.textLabel.copyWith(
+                  color: const Color(0xFFE1E1E3),
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              SizedBox(height: t.xs),
               Expanded(
                 child: isIdentity
                     ? SendSourceSelector2x2(pageNumber: targetSend)

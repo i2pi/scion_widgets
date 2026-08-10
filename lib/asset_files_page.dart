@@ -537,7 +537,6 @@ class _AssetFilesPageState extends State<AssetFilesPage> {
                   dense: true,
                   icon: Icons.text_fields,
                   label: 'Upload Font',
-                  tooltip: 'Upload font (.ttf)',
                   onPressed: () async {
                     await uploadFontFlow(context);
                     _refresh();
@@ -547,7 +546,6 @@ class _AssetFilesPageState extends State<AssetFilesPage> {
                   dense: true,
                   icon: Icons.add_photo_alternate_outlined,
                   label: 'Upload Sprite',
-                  tooltip: 'Upload sprite (.png)',
                   onPressed: () async {
                     if (await uploadSpriteFlow(context)) _refresh();
                   },
@@ -556,14 +554,12 @@ class _AssetFilesPageState extends State<AssetFilesPage> {
                   dense: true,
                   icon: Icons.upload_file,
                   label: 'Upload Preset',
-                  tooltip: 'Upload preset (.spre)',
                   onPressed: _uploadPreset,
                 ),
                 AppButton(
                   dense: true,
                   icon: Icons.save_outlined,
                   label: 'Save Preset',
-                  tooltip: 'Save full-system preset',
                   onPressed: _saveSystemPreset,
                 ),
                 if (_loading)
@@ -579,7 +575,6 @@ class _AssetFilesPageState extends State<AssetFilesPage> {
                     dense: true,
                     icon: Icons.refresh,
                     label: 'Refresh',
-                    tooltip: 'Refresh',
                     onPressed: _refresh,
                   ),
               ],
@@ -651,7 +646,6 @@ class _AssetFilesPageState extends State<AssetFilesPage> {
                                             AppButton(
                                               dense: true,
                                               icon: Icons.play_arrow,
-                                              tooltip: 'Load onto device',
                                               onPressed: () => _loadPreset(f),
                                             ),
                                             SizedBox(width: t.xs),
@@ -660,21 +654,18 @@ class _AssetFilesPageState extends State<AssetFilesPage> {
                                             dense: true,
                                             icon:
                                                 Icons.drive_file_rename_outline,
-                                            tooltip: 'Rename',
                                             onPressed: () => _rename(f),
                                           ),
                                           SizedBox(width: t.xs),
                                           AppButton(
                                             dense: true,
                                             icon: Icons.download,
-                                            tooltip: 'Download',
                                             onPressed: () => _download(f),
                                           ),
                                           SizedBox(width: t.xs),
                                           AppButton(
                                             dense: true,
                                             icon: Icons.delete_outline,
-                                            tooltip: 'Delete',
                                             accentColor:
                                                 const Color(0xFFD0605F),
                                             onPressed: () => _delete(f),
