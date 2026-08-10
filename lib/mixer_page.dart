@@ -6,6 +6,7 @@ import 'grid.dart';
 import 'labeled_card.dart';
 import 'neumorphic_slider.dart';
 import 'panel.dart';
+import 'rotary_knob.dart';
 import 'send_source_selector.dart';
 import 'signal_colors.dart';
 
@@ -27,6 +28,19 @@ class MixerPage extends StatelessWidget {
   /// System Overview diagram.
   static Color sourceColor(int sourceSend) =>
       isReturn(sourceSend) ? kReturnSignalColor : kSendSignalColor;
+
+  /// Opening A/B assignment for a cell: a row's identity source (Send N on the
+  /// Send N row) is A, the Return column is B, everything else unassigned.
+  ///
+  /// This is the arrangement a row gets set to by hand anyway — fade the send
+  /// against the return — so the crossfader is usable on arrival instead of
+  /// refusing to move until both groups are picked. The two cases never
+  /// collide: rows are sends 1-3, the return is source 4.
+  static ABGroup defaultGroup(int targetSend, int sourceSend) {
+    if (sourceSend == targetSend) return ABGroup.a;
+    if (isReturn(sourceSend)) return ABGroup.b;
+    return ABGroup.none;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -60,12 +74,20 @@ class _MixerMatrix extends StatefulWidget {
 class _MixerMatrixState extends State<_MixerMatrix> {
   // Per-row A/B state: row index (0-2) -> { sourceSend -> group }
   final List<Map<int, ABGroup>> _groups = [
-    for (var _ in List.filled(3, null))
-      {for (var s in MixerPage.sources) s: ABGroup.none},
+    for (int row = 0; row < 3; row++)
+      {
+        for (final s in MixerPage.sources)
+          s: MixerPage.defaultGroup(row + 1, s),
+      },
   ];
 
-  // Per-row crossfade position: 0.0 = A, 1.0 = B
-  final List<double> _crossfade = [0.5, 0.5, 0.5];
+  // Per-row crossfade position: 0.0 = A, 1.0 = B.
+  //
+  // Opens hard on A, so the row's own send starts at full weight and the
+  // Return overlay (B, see MixerPage.defaultGroup) contributes nothing until
+  // the fader is moved. Starting centred would have every row come up at a
+  // half-mix nobody asked for.
+  final List<double> _crossfade = [0.0, 0.0, 0.0];
 
   double _weightFor(int row, int sourceSend) {
     switch (_groups[row][sourceSend]!) {
@@ -362,15 +384,35 @@ class _Crossfader extends StatefulWidget {
 
 class _CrossfaderState extends State<_Crossfader>
     with SingleTickerProviderStateMixin {
-  static const _autoDuration = Duration(seconds: 1);
+  // Auto-take transition time, in seconds, per direction. Seconds rather than
+  // milliseconds so the knob reads 0.10-5.00 instead of 100-5000; the default
+  // is the 1s that used to be hardcoded here.
+  static const double _minTake = 0.1;
+  static const double _maxTake = 5.0;
+  static const double _defaultTake = 1.0;
+
   // ~30 fps: update every ~33ms for smooth motion without flooding OSC
   static const _autoStepInterval = Duration(milliseconds: 33);
+
+  double _takeToA = _defaultTake;
+  double _takeToB = _defaultTake;
+
+  /// Linked by default, so an auto take runs for the same time in both
+  /// directions and A->B->A is symmetric. Unlink to set the two ends apart.
+  bool _linked = true;
 
   late final Ticker _ticker;
   double _autoFrom = 0;
   double _autoTo = 0;
   bool _autoRunning = false;
   Duration _lastStep = Duration.zero;
+
+  /// Duration of the take currently running, captured when it starts so that
+  /// turning a knob mid-transition cannot warp the one already under way.
+  Duration _activeDuration = _durationOf(_defaultTake);
+
+  static Duration _durationOf(double seconds) =>
+      Duration(microseconds: (seconds * 1000000).round());
 
   @override
   void initState() {
@@ -380,13 +422,13 @@ class _CrossfaderState extends State<_Crossfader>
 
   void _onTick(Duration elapsed) {
     // Throttle: only call onChanged at ~30fps intervals
-    if (elapsed - _lastStep < _autoStepInterval && elapsed < _autoDuration) {
+    if (elapsed - _lastStep < _autoStepInterval && elapsed < _activeDuration) {
       return;
     }
     _lastStep = elapsed;
 
-    final t =
-        (elapsed.inMicroseconds / _autoDuration.inMicroseconds).clamp(0.0, 1.0);
+    final t = (elapsed.inMicroseconds / _activeDuration.inMicroseconds)
+        .clamp(0.0, 1.0);
     // Ease in-out
     final eased = t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) * (-2 * t + 2) / 2;
     final v = _autoFrom + (_autoTo - _autoFrom) * eased;
@@ -399,8 +441,10 @@ class _CrossfaderState extends State<_Crossfader>
     }
   }
 
+  /// Which knob governs a take: the one at the end being faded toward.
   void _startAuto(double target) {
     if (widget.onAutoRequest?.call(target) == true) return; // blocked
+    _activeDuration = _durationOf(target <= 0.5 ? _takeToA : _takeToB);
     _autoFrom = widget.value;
     _autoTo = target;
     _autoRunning = true;
@@ -415,13 +459,98 @@ class _CrossfaderState extends State<_Crossfader>
     super.dispose();
   }
 
+  void _setTake(bool toA, double seconds) {
+    setState(() {
+      if (_linked) {
+        _takeToA = seconds;
+        _takeToB = seconds;
+      } else if (toA) {
+        _takeToA = seconds;
+      } else {
+        _takeToB = seconds;
+      }
+    });
+  }
+
+  void _toggleLink() {
+    setState(() {
+      _linked = !_linked;
+      // Re-linking adopts the A end's time for both. Otherwise the two knobs
+      // could sit at visibly different values while the icon claims they are
+      // linked, and the next take would pick whichever end it happened to be
+      // headed for.
+      if (_linked) _takeToB = _takeToA;
+    });
+  }
+
+  /// One of the two take-time knobs flanking the fader. [toA] is the left one,
+  /// governing the take toward A.
+  /// The knob face only — its caption is supplied by the row, so the knob and
+  /// the AUTO button caption on the same line rather than each captioning
+  /// itself at its own height.
+  Widget _takeKnob(GridTokens t, {required bool toA}) => RotaryKnob(
+        label: '',
+        minValue: _minTake,
+        maxValue: _maxTake,
+        value: toA ? _takeToA : _takeToB,
+        defaultValue: _defaultTake,
+        format: '%.2f',
+        size: t.knobSm,
+        labelStyle: t.textLabel,
+        // Detent at the default so a knob clicks back to a 1s take.
+        snapConfig: SnapConfig(
+          snapPoints: const [_defaultTake],
+          snapRegionHalfWidth: (_maxTake - _minTake) * 0.015,
+          snapBehavior: SnapBehavior.hard,
+        ),
+        onChanged: (v) => _setTake(toA, v),
+      );
+
+  Widget _linkToggle(GridTokens t) => GestureDetector(
+        onTap: _toggleLink,
+        behavior: HitTestBehavior.opaque,
+        child: Tooltip(
+          message: _linked
+              ? 'Take times linked — tap to set each end independently'
+              : 'Take times independent — tap to link',
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: t.xs),
+            child: Icon(
+              _linked ? Icons.link : Icons.link_off,
+              size: t.knobSm * 0.4,
+              color: _linked ? const Color(0xFFFFF176) : Colors.grey[600],
+            ),
+          ),
+        ),
+      );
+
   @override
   Widget build(BuildContext context) {
     final t = GridProvider.of(context);
     const aColor = Color(0xFF5B8DEF);
     const bColor = Color(0xFFEF7B5B);
-    final labelStyle =
-        t.textLabel.copyWith(fontWeight: FontWeight.w700, fontSize: t.u * 1.4);
+
+    // The row is a two-line grid, and everything hangs off it:
+    //
+    //   band     one row of controls, all vertically centred in a box of the
+    //            same height, so the knob face, the link icon, the AUTO button
+    //            and the fader thumb share one centreline;
+    //   caption  one line of text directly beneath, so 'Take' and 'A' sit on
+    //            the same baseline.
+    //
+    // Aligning the outer Row to .start is what holds those two lines true —
+    // centring or bottom-aligning lets each element float to its own height,
+    // which is what made this read as parts scattered on the page.
+    final band = t.knobSm;
+    final captionStyle = t.textLabel;
+
+    Widget banded(Widget child) =>
+        SizedBox(height: band, child: Center(child: child));
+
+    Widget captioned(Widget control, Widget caption) => Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [banded(control), SizedBox(height: t.xs), caption],
+        );
 
     // Momentary, never selected — the accent supplies both the group-coloured
     // label (AppButton uses it as the foreground when unselected) and the
@@ -433,48 +562,66 @@ class _CrossfaderState extends State<_Crossfader>
           onPressed: () => _startAuto(target),
         );
 
-    return Row(
-      children: [
-        Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('A', style: labelStyle.copyWith(color: aColor)),
-            SizedBox(height: t.xs),
-            autoBtn(aColor, 0.0),
-          ],
+    // Knob, link, AUTO — then the fader — then the mirror of that, so the row
+    // is symmetric about the bar and each link icon sits against the knob it
+    // acts on.
+    Widget end({required bool isA}) {
+      final color = isA ? aColor : bColor;
+      final children = <Widget>[
+        captioned(
+          _takeKnob(t, toA: isA),
+          Text('Take', style: captionStyle),
         ),
+        banded(_linkToggle(t)),
+        captioned(
+          autoBtn(color, isA ? 0.0 : 1.0),
+          // Same size and baseline as 'Take'; the group reads from the colour,
+          // which already carries it on the AUTO rim and the cell toggles.
+          Text(isA ? 'A' : 'B',
+              style: captionStyle.copyWith(
+                  fontWeight: FontWeight.w700, color: color)),
+        ),
+      ];
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: isA ? children : children.reversed.toList(),
+      );
+    }
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        end(isA: true),
         SizedBox(width: t.sm),
+        // The fader sits in the same band, so its thumb centres on the row's
+        // one centreline instead of straddling it.
         Expanded(
-          child: NeumorphicSlider(
-            axis: SliderAxis.horizontal,
-            minValue: 0.0,
-            maxValue: 1.0,
-            value: widget.value,
-            defaultValue: 0.5,
-            label: '',
-            format: '',
-            trackWidth: 14,
-            thumbLength: 36,
-            graduations: 10,
-            onChanged: (v) {
-              // Manual drag cancels any running auto-crossfade
-              if (_autoRunning) {
-                _ticker.stop();
-                _autoRunning = false;
-              }
-              widget.onChanged(v);
-            },
+          child: banded(
+            NeumorphicSlider(
+              axis: SliderAxis.horizontal,
+              minValue: 0.0,
+              maxValue: 1.0,
+              value: widget.value,
+              defaultValue: 0.5,
+              label: '',
+              format: '',
+              trackWidth: 14,
+              thumbLength: 36,
+              graduations: 10,
+              onChanged: (v) {
+                // Manual drag cancels any running auto-crossfade
+                if (_autoRunning) {
+                  _ticker.stop();
+                  _autoRunning = false;
+                }
+                widget.onChanged(v);
+              },
+            ),
           ),
         ),
         SizedBox(width: t.sm),
-        Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('B', style: labelStyle.copyWith(color: bColor)),
-            SizedBox(height: t.xs),
-            autoBtn(bColor, 1.0),
-          ],
-        ),
+        end(isA: false),
       ],
     );
   }

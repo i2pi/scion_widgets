@@ -11,21 +11,13 @@ import 'rotary_knob.dart';
 import 'neumorphic_slider.dart';
 import 'signal_colors.dart';
 
-// Styles are now derived from GridTokens where possible, but these
-// status-indicator colors don't fit the standard token palette.
-const TextStyle _greenText = TextStyle(
-  color: Colors.green,
-  fontFamily: 'Courier', fontFamilyFallback: const ['Courier New', 'monospace'],
-  fontSize: 11,
-  // Match the System Overview tiles: slightly heavier than regular, not bold.
-  fontWeight: FontWeight.w600,
-);
-const TextStyle _redText = TextStyle(
-  color: Colors.red,
-  fontFamily: 'Courier', fontFamilyFallback: const ['Courier New', 'monospace'],
-  fontSize: 11,
-  fontWeight: FontWeight.w600,
-);
+// Status-indicator colours don't fit the standard token palette, but the line
+// metrics must: these are DERIVED from kInputRowStyle rather than restated, so
+// a tile's status text cannot drift away from the format rows beside it. They
+// previously restated the family and size and added fontWeight: w600, which is
+// how the Return tile ended up visibly bolder than inputs 1-3 and on different
+// line spacing.
+final TextStyle _redText = kInputRowStyle.copyWith(color: Colors.red);
 
 final TextStyle _overlayStyle = TextStyle(
   color: Colors.grey[800],
@@ -252,31 +244,16 @@ class _InputSourceTileState extends State<_InputSourceTile> {
       // (direct Stack child) so "Disconnected" sits dead-centre vertically and
       // horizontally, matching the System Overview tile.
       child: _connected
-          ? Padding(
-              padding: EdgeInsets.all(GridProvider.maybeOf(context)?.xs ?? 4),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  InputLabelField(inputIndex: widget.inputIndex),
-                  Text(_res,
-                      style: kInputRowStyle,
-                      strutStyle: kInputRowStrut,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis),
-                  Text('${_fps.toStringAsFixed(2)}${_interlaced ? 'i' : 'p'}',
-                      style: kInputRowStyle, strutStyle: kInputRowStrut),
-                  Text('$_bpp bit',
-                      style: kInputRowStyle, strutStyle: kInputRowStrut),
-                  Text('$_cs $_sub',
-                      style: kInputRowStyle,
-                      strutStyle: kInputRowStrut,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis),
-                ],
-              ),
+          ? _FormatInfo(
+              nameRow: InputLabelField(inputIndex: widget.inputIndex),
+              res: _res,
+              fps: _fps,
+              bpp: _bpp,
+              cs: _cs,
+              sub: _sub,
+              interlaced: _interlaced,
             )
-          : const Center(child: Text('Disconnected', style: _redText)),
+          : Center(child: Text('Disconnected', style: _redText)),
     );
   }
 }
@@ -376,6 +353,7 @@ class _ReturnSourceTileState extends State<_ReturnSourceTile> {
       borderColor: kReturnSignalColor,
       outlineWhenUnselected: widget.outlineWhenUnselected,
       child: _FormatInfo(
+          nameRow: const StaticNameRow('Return'),
           res: _res,
           fps: _fps,
           bpp: 12,
@@ -386,8 +364,17 @@ class _ReturnSourceTileState extends State<_ReturnSourceTile> {
   }
 }
 
-/// Format info column used by both tile types.
+/// The five-row text column every tile shows: a name, then resolution, frame
+/// rate, bit depth and colourspace.
+///
+/// Genuinely shared by both tile types. It previously claimed to be, but only
+/// the Return used it while the input tiles built the same column inline —
+/// which is how the two drifted onto different font weights and how the Return
+/// came to be missing its name row altogether.
 class _FormatInfo extends StatelessWidget {
+  /// The tile's first row: [InputLabelField] for a renameable input, a
+  /// [StaticNameRow] for the Return.
+  final Widget nameRow;
   final String res;
   final double fps;
   final int bpp;
@@ -396,6 +383,7 @@ class _FormatInfo extends StatelessWidget {
   final bool interlaced;
 
   const _FormatInfo({
+    required this.nameRow,
     required this.res,
     required this.fps,
     required this.bpp,
@@ -413,13 +401,20 @@ class _FormatInfo extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
+          nameRow,
           Text(res,
-              style: _greenText, maxLines: 1, overflow: TextOverflow.ellipsis),
+              style: kInputRowStyle,
+              strutStyle: kInputRowStrut,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis),
           Text('${fps.toStringAsFixed(2)}${interlaced ? 'i' : 'p'}',
-              style: _greenText),
-          Text('$bpp bit', style: _greenText),
+              style: kInputRowStyle, strutStyle: kInputRowStrut),
+          Text('$bpp bit', style: kInputRowStyle, strutStyle: kInputRowStrut),
           Text('$cs $sub',
-              style: _greenText, maxLines: 1, overflow: TextOverflow.ellipsis),
+              style: kInputRowStyle,
+              strutStyle: kInputRowStrut,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis),
         ],
       ),
     );

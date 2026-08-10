@@ -106,7 +106,11 @@ class _NeumorphicSliderState extends State<NeumorphicSlider> {
   void _onPointerDown(PointerDownEvent e) {
     if (_activePointer >= 0) return; // already tracking a pointer
     _activePointer = e.pointer;
-    _dragging = true;
+    // setState, not a bare assignment: _dragging drives the amber active
+    // colour, and nothing else here guarantees a rebuild. A tap that lands on
+    // the value the slider already holds changes nothing below, so without
+    // this the slider would not light up until the first move.
+    setState(() => _dragging = true);
     // Jump to tapped position
     final box = context.findRenderObject() as RenderBox?;
     if (box == null) return;
@@ -136,13 +140,16 @@ class _NeumorphicSliderState extends State<NeumorphicSlider> {
   void _onPointerUp(PointerUpEvent e) {
     if (e.pointer != _activePointer) return;
     _activePointer = -1;
-    _dragging = false;
+    // Without setState the flag cleared but no rebuild was scheduled, so the
+    // slider stayed painted amber after release — every slider touched in a
+    // session ended up looking active at once.
+    setState(() => _dragging = false);
   }
 
   void _onPointerCancel(PointerCancelEvent e) {
     if (e.pointer != _activePointer) return;
     _activePointer = -1;
-    _dragging = false;
+    setState(() => _dragging = false);
   }
 
   void _onDoubleTap() {
